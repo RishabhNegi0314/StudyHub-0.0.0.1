@@ -1,3 +1,70 @@
+/* Add these new styles to your style.css file */
+
+#notesContainer {
+    padding-top: 1rem;
+}
+
+.breadcrumb {
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+    color: #64748b;
+}
+
+.breadcrumb .back-btn {
+    cursor: pointer;
+    color: #3b82f6;
+    font-weight: 500;
+    margin-right: 8px;
+}
+
+.subject-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+}
+
+.subject-tile {
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.subject-tile:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border-color: #3b82f6;
+}
+
+.subject-tile h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.module-list .module-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.module-list .module-item:hover {
+    background-color: #f8fafc;
+}
+
+.file-view {
+    text-align: center;
+    padding: 2rem;
+    background-color: #f8fafc;
+    border-radius: 8px;
+}
+/* ********************************* */
 * {
     margin: 0;
     padding: 0;
@@ -265,6 +332,7 @@ body {
 }
 
 .btn {
+    /* margin-top: 20px; */
     background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
     color: white;
     border: none;

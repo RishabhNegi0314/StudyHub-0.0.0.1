@@ -1,63 +1,85 @@
+// *****************************************************************************
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const multer = require('multer');
-const GridFsStorage = require('multer-gridfs-storage');
+const { GridFSBucket } = require('mongodb');
 const cors = require('cors');
+const methodOverride = require('method-override');
 require('dotenv').config();
 
-// --- Main Server Function ---
 const startServer = async () => {
     try {
-        // --- MongoDB and Mongoose Setup ---
         const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/studyhub';
-        await mongoose.connect(mongoURI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
+        await mongoose.connect(mongoURI);
         console.log('MongoDB connected successfully.');
 
-        // Initialize Express app
+        const conn = mongoose.connection;
+        const gfs = new GridFSBucket(conn.db, {
+            bucketName: 'uploads'
+        });
+        console.log('GridFS has been initialized.');
+
         const app = express();
         const server = http.createServer(app);
-        const io = new Server(server, {
-            cors: { origin: "*" }
-        });
+        const io = new Server(server, { cors: { origin: "*" } });
 
         // Middleware
         app.use(cors());
+        app.use(express.json());
+        app.use(express.urlencoded({ extended: true }));
+        app.use(methodOverride('_method'));
         app.use(express.static('public'));
 
-        const db = mongoose.connection.db;
-        const gfs = new mongoose.mongo.GridFSBucket(db, { bucketName: 'uploads' });
-        console.log('GridFS has been initialized.');
-
-        const storage = new GridFsStorage({
-            db: db,
-            file: (req, file) => ({ bucketName: 'uploads', filename: file.originalname })
-        });
+        const storage = multer.memoryStorage();
         const upload = multer({ storage });
 
-        // --- API Routes for Files ---
+        // --- API Routes for Files (CORRECTED) ---
         app.post('/upload', upload.single('file'), (req, res) => {
-            io.emit('fileUploaded');
-            res.status(201).json({ file: req.file });
+            const { subject, module } = req.body;
+            if (!req.file || !subject || !module) {
+                return res.status(400).send('Missing file, subject, or module.');
+            }
+            const uploadStream = gfs.openUploadStream(req.file.originalname, {
+                metadata: { subject, module } // Save subject and module here
+            });
+            uploadStream.end(req.file.buffer);
+
+            uploadStream.on('finish', () => {
+                io.emit('fileUploaded');
+                res.status(201).json({ file: req.file });
+            });
+            uploadStream.on('error', () => res.status(500).json({ err: 'Error uploading file.' }));
         });
+
         app.get('/files', async (req, res) => {
-            try {
-                const files = await db.collection('uploads.files').find().toArray();
-                return res.json(files);
-            } catch (error) { res.status(500).json({ err: 'Server error' }); }
+            const files = await gfs.find().toArray();
+            const structuredFiles = {};
+            files.forEach(file => {
+                if (file.metadata) {
+                    const { subject, module } = file.metadata;
+                    if (!subject || !module) return;
+                    if (!structuredFiles[subject]) {
+                        structuredFiles[subject] = {};
+                    }
+                    structuredFiles[subject][module] = {
+                        filename: file.filename,
+                        id: file._id,
+                        size: file.length,
+                        uploadDate: file.uploadDate
+                    };
+                }
+            });
+            return res.json(structuredFiles);
         });
-        app.get('/files/:filename', async (req, res) => {
-            try {
-                const file = await db.collection('uploads.files').findOne({ filename: req.params.filename });
-                if (!file) return res.status(404).json({ err: 'No such file exists' });
-                gfs.openDownloadStream(file._id).pipe(res);
-            } catch (error) { res.status(500).json({ err: 'Server error' }); }
+
+        app.get('/files/:filename', (req, res) => {
+            const downloadStream = gfs.openDownloadStreamByName(req.params.filename);
+            downloadStream.pipe(res);
         });
-        
+
         // --- Message Schema and Model ---
         const MessageSchema = new mongoose.Schema({
             username: { type: String, required: true },
@@ -68,47 +90,30 @@ const startServer = async () => {
 
         // --- API Route to Get All Messages ---
         app.get('/messages', async (req, res) => {
-            try {
-                const messages = await Message.find().sort({ timestamp: 1 });
-                res.json(messages);
-            } catch (error) {
-                res.status(500).json({ err: 'Could not fetch messages' });
-            }
+            const messages = await Message.find().sort({ timestamp: 1 });
+            res.json(messages);
         });
 
         // --- Socket.io Real-time Logic ---
         io.on('connection', (socket) => {
-            console.log('A new user connected');
-            // Broadcast the new user count to everyone
+            const sessionUsername = "User" + Math.floor(Math.random() * 1000);
             io.emit('updateUserCount', io.sockets.sockets.size);
-
             socket.on('chatMessage', (data) => {
-                const newMessage = new Message({
-                    username: "User" + Math.floor(Math.random() * 1000), // You can enhance this later
-                    text: data.text
-                });
-                // Save the message, then broadcast it
-                newMessage.save().then(message => {
-                    io.emit('chatMessage', message);
-                });
+                const newMessage = new Message({ username: sessionUsername, text: data.text });
+                newMessage.save().then(message => io.emit('chatMessage', message));
             });
-
             socket.on('disconnect', () => {
-                console.log('User disconnected');
-                // Broadcast the updated user count to everyone
                 io.emit('updateUserCount', io.sockets.sockets.size);
             });
         });
 
         // --- Start the server ---
         const PORT = process.env.PORT || 3000;
-        server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+        server.listen(PORT, () => console.log(`🚀 Server is running on port ${PORT}`));
 
     } catch (err) {
         console.error('FATAL SERVER ERROR:', err);
         process.exit(1);
     }
 };
-
-// --- Run the server ---
 startServer();

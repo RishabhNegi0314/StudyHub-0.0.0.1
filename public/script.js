@@ -1,61 +1,146 @@
+// *************************************************************************
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Initialize Socket.IO connection ---
-    // This requires <script src="/socket.io/socket.io.js"></script> in your HTML
-    const socket = io();
+    const SERVER_URL = 'http://localhost:3000';
+    const socket = io(SERVER_URL);
 
     // --- Element References ---
+    const notesContainer = document.getElementById('notesContainer');
     const chatMessages = document.getElementById('chatMessages');
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
     const userCountElement = document.getElementById('userCount');
-    const notesUpload = document.getElementById('notesUpload');
-    const notesList = document.getElementById('notesList');
-    const browseBtn = notesUpload.querySelector('.btn');
 
-    // --- Real-time Event Listeners from Server---
+    // --- State Management ---
+    let studyMaterials = {};
+    let currentView = 'subjects';
+    let selectedSubject = null;
+    let selectedModule = null;
+    const moduleNames = ["Module 1", "Module 2", "Module 3", "Module 4", "Module 5", "Syllabus"];
 
-    // Listen for user count updates
-    socket.on('updateUserCount', (count) => {
-        userCountElement.textContent = count;
+    // --- Render Functions ---
+    function renderSubjects() {
+        notesContainer.innerHTML = `
+            <div class="breadcrumb">Subjects</div>
+            <div class="subject-grid"></div>
+        `;
+        const grid = notesContainer.querySelector('.subject-grid');
+        const subjects = Object.keys(studyMaterials);
+        if (subjects.length === 0) {
+            grid.innerHTML = "<p>No subjects with files are available. Upload a file to get started!</p>";
+            return;
+        }
+        subjects.forEach(subject => {
+            const tile = document.createElement('div');
+            tile.className = 'subject-tile';
+            tile.dataset.subject = subject;
+            tile.innerHTML = `<h3>${subject}</h3>`;
+            grid.appendChild(tile);
+        });
+    }
+
+    function renderModules(subject) {
+        notesContainer.innerHTML = `
+            <div class="breadcrumb"><span class="back-btn" data-target="subjects">&larr; Subjects</span> / ${subject}</div>
+            <div class="module-list"></div>
+        `;
+        const list = notesContainer.querySelector('.module-list');
+        moduleNames.forEach(moduleName => {
+            const moduleItem = document.createElement('div');
+            moduleItem.className = 'module-item';
+            moduleItem.dataset.subject = subject;
+            moduleItem.dataset.module = moduleName;
+            const hasFile = studyMaterials[subject] && studyMaterials[subject][moduleName];
+            moduleItem.innerHTML = `
+                <span>${moduleName}</span>
+                <span style="color: ${hasFile ? '#10b981' : '#64748b'}; font-weight: ${hasFile ? 'bold' : 'normal'};">${hasFile ? 'Available' : 'No File'}</span>
+            `;
+            list.appendChild(moduleItem);
+        });
+    }
+
+    function renderFile(subject, module) {
+        const file = studyMaterials[subject][module];
+        notesContainer.innerHTML = `
+            <div class="breadcrumb">
+                <span class="back-btn" data-target="subjects">&larr; Subjects</span> / 
+                <span class="back-btn" data-target="modules" data-subject="${subject}">${subject}</span> / 
+                ${module}
+            </div>
+            <div class="file-view">
+                <h3>${file.filename}</h3>
+                <p>${(file.size / 1024).toFixed(2)} KB</p>
+                <a href="${SERVER_URL}/files/${encodeURIComponent(file.filename)}" target="_blank" class="btn">Download File</a>
+            </div>
+        `;
+    }
+
+    // --- Navigation ---
+    function updateView() {
+        if (currentView === 'subjects') renderSubjects();
+        else if (currentView === 'modules') renderModules(selectedSubject);
+        else if (currentView === 'file') renderFile(selectedSubject, selectedModule);
+    }
+
+    notesContainer.addEventListener('click', (e) => {
+        const subjectTile = e.target.closest('.subject-tile');
+        const moduleItem = e.target.closest('.module-item');
+        const backBtn = e.target.closest('.back-btn');
+
+        if (backBtn) {
+            const target = backBtn.dataset.target;
+            if (target === 'subjects') {
+                currentView = 'subjects';
+                selectedSubject = null;
+                selectedModule = null;
+            } else if (target === 'modules') {
+                currentView = 'modules';
+                selectedModule = null;
+            }
+            updateView();
+        } else if (subjectTile) {
+            selectedSubject = subjectTile.dataset.subject;
+            currentView = 'modules';
+            updateView();
+        } else if (moduleItem) {
+            selectedModule = moduleItem.dataset.module;
+            if (studyMaterials[selectedSubject] && studyMaterials[selectedSubject][selectedModule]) {
+                currentView = 'file';
+                updateView();
+            } else {
+                alert('No file available for this module. Please upload one.');
+            }
+        }
     });
 
-    // Listen for incoming chat messages
-    socket.on('chatMessage', (message) => {
-        renderMessage(message);
-    });
-
-    // Listen for a signal that a file was uploaded successfully
-    socket.on('fileUploaded', () => {
-        fetchAndDisplayFiles(); // Refresh the file list
-    });
-
-
-    // --- Functions ---
-
-    // Fetch message history from the server when the page loads
-    async function fetchMessages() {
+    // --- Data Fetching and Socket Listeners ---
+    async function fetchAndDisplayFiles() {
         try {
-            const response = await fetch('/messages');
-            const messages = await response.json();
-            messages.forEach(message => {
-                renderMessage(message);
-            });
-        } catch (error) {
-            console.error('Error fetching messages:', error);
+            const res = await fetch(`${SERVER_URL}/files`);
+            studyMaterials = await res.json();
+            updateView();
+        } catch (e) {
+            console.error('Failed to load files', e);
         }
     }
-
-    // Add a single message to the chat window
+    socket.on('fileUploaded', fetchAndDisplayFiles);
+    
+    // --- Chat Functions ---
+    async function fetchMessages() {
+        try {
+            const response = await fetch(`${SERVER_URL}/messages`);
+            const messages = await response.json();
+            chatMessages.innerHTML = '';
+            messages.forEach(renderMessage);
+        } catch (error) { console.error('Error fetching messages:', error); }
+    }
     function renderMessage(doc) {
         const messageDiv = document.createElement('div');
-        messageDiv.className = 'message user'; // Apply same style for all messages for simplicity
+        messageDiv.className = 'message user';
         messageDiv.innerHTML = `<div class="message-bubble"><strong>${doc.username}:</strong> ${doc.text}</div>`;
         chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll to the bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
-
-    // Send a message to the server
     function sendMessage() {
         const text = chatInput.value.trim();
         if (text) {
@@ -63,92 +148,12 @@ document.addEventListener('DOMContentLoaded', () => {
             chatInput.value = '';
         }
     }
-
-    // Fetch and display all uploaded files
-    async function fetchAndDisplayFiles() {
-        try {
-            const res = await fetch('/files');
-            const files = await res.json();
-            notesList.innerHTML = ''; // Clear list before repopulating
-            files.forEach(addNoteItem);
-        } catch (e) {
-            console.error('Failed to load files', e);
-        }
-    }
-    
-    // Add a single file to the notes list
-    function addNoteItem(file) {
-        const sizeInMB = (file.length / (1024 * 1024)).toFixed(2);
-        const noteItem = document.createElement('div');
-        noteItem.className = 'note-item';
-        noteItem.innerHTML = `
-            <div>
-                <strong>${file.filename}</strong>
-                <div style="font-size: 0.85rem; color: #64748b; margin-top: 4px;">
-                    ${file.filename.split('.').pop().toUpperCase()} • ${sizeInMB} MB
-                </div>
-            </div>
-            <a href="/files/${encodeURIComponent(file.filename)}" target="_blank" class="btn">View</a>
-        `;
-        notesList.appendChild(noteItem);
-    }
-
-    // Upload one or more files to the server
-    async function uploadFiles(fileList) {
-        const formData = new FormData();
-        // Since the backend is configured for a single file upload, we'll upload one by one.
-        for (const file of fileList) {
-            formData.set('file', file); // Use .set to overwrite the file for each loop
-             try {
-                await fetch('/upload', { method: 'POST', body: formData });
-             } catch (error) {
-                console.error('File upload failed:', error);
-             }
-        }
-        // The 'fileUploaded' socket event will handle refreshing the list automatically.
-    }
-
-
-    // --- UI Event Listeners ---
-    
-    // Chat functionality
     sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
+    chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+    socket.on('updateUserCount', (count) => userCountElement.textContent = count);
+    socket.on('chatMessage', (message) => renderMessage(message));
 
-    // File Upload: Browse button
-    browseBtn.addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.multiple = true; // Allow multiple file selection
-        input.accept = '.pdf,.doc,.docx,.txt,.ppt,.pptx';
-        input.onchange = (e) => {
-            if (e.target.files.length) {
-                uploadFiles(e.target.files);
-            }
-        };
-        input.click();
-    });
-
-    // File Upload: Drag and drop
-    notesUpload.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        notesUpload.classList.add('dragover');
-    });
-    notesUpload.addEventListener('dragleave', () => {
-        notesUpload.classList.remove('dragover');
-    });
-    notesUpload.addEventListener('drop', (e) => {
-        e.preventDefault();
-        notesUpload.classList.remove('dragover');
-        if (e.dataTransfer.files.length) {
-            uploadFiles(e.dataTransfer.files);
-        }
-    });
-
-    // --- Initial Data Load ---
-    // Fetch everything needed when the page first loads
+    // --- Initial Load ---
     fetchAndDisplayFiles();
     fetchMessages();
 });

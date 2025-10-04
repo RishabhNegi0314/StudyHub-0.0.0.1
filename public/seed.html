@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed Database</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 2rem 3rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 400px; }
+        h1 { text-align: center; color: #333; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #555; }
+        input[type="text"], select, input[type="file"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+        #status { text-align: center; margin-top: 1rem; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload Study Material</h1>
+        <form id="seedForm">
+            <div class="form-group">
+                <label for="subject">Subject Name:</label>
+                <input type="text" id="subject" name="subject" required>
+            </div>
+            <div class="form-group">
+                <label for="module">Module:</label>
+                <select id="module" name="module" required>
+                    <option value="" disabled selected>-- Select a Module --</option>
+                    <option value="Module 1">Module 1 (Notes)</option>
+                    <option value="Module 2">Module 2 (Notes)</option>
+                    <option value="Module 3">Module 3 (Notes)</option>
+                    <option value="Module 4">Module 4 (Notes)</option>
+                    <option value="Module 5">Module 5 (Notes)</option>
+                    <option value="Syllabus">Syllabus</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="file">File:</label>
+                <input type="file" id="file" name="file" required>
+            </div>
+            <button type="submit">Upload</button>
+        </form>
+        <p id="status"></p>
+    </div>
+
+    <script src="seed-script.js"></script>
+</body>
+</html>
